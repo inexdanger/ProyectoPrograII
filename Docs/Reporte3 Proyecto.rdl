@@ -1,0 +1,170 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition"
+        xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <rd:ReportUnitType>Mm</rd:ReportUnitType>
+  <rd:ReportID>11111111-aaaa-bbbb-cccc-000000000002</rd:ReportID>
+  <AutoRefresh>0</AutoRefresh>
+
+  <DataSources>
+    <DataSource Name="DS_Ferreteria502">
+      <ConnectionProperties>
+        <DataProvider>SQL</DataProvider>
+        <ConnectString>Data Source=localhost;Initial Catalog=Ferreteria502;User ID=admin;Password=root;</ConnectString>
+      </ConnectionProperties>
+      <rd:DataSourceID>00000000-0000-0000-0000-000000000000</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+
+  <ReportParameters>
+    <ReportParameter Name="FechaDesde">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha desde</Prompt>
+      <DefaultValue><Values><Value>=DateSerial(Year(Today()),1,1)</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="FechaHasta">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha hasta</Prompt>
+      <DefaultValue><Values><Value>=Today()</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="IdSucursal">
+      <DataType>Integer</DataType>
+      <Prompt>Sucursal</Prompt>
+      <MultiValue>true</MultiValue>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+          <LabelField>NombreSucursal</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+    </ReportParameter>
+  </ReportParameters>
+
+  <DataSets>
+    <DataSet Name="DS_Sucursales">
+      <Fields>
+        <Field Name="IdSucursal"><DataField>IdSucursal</DataField></Field>
+        <Field Name="NombreSucursal"><DataField>NombreSucursal</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <CommandText>SELECT IdSucursal, NombreSucursal FROM dbo.Sucursales ORDER BY NombreSucursal;</CommandText>
+      </Query>
+    </DataSet>
+
+    <DataSet Name="DS_TopClientes">
+      <Fields>
+        <Field Name="IdCliente"><DataField>IdCliente</DataField></Field>
+        <Field Name="TotalFacturado"><DataField>TotalFacturado</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+WITH Base AS(
+  SELECT V.IdCliente, SUM(V.TotalVenta) AS TotalFacturado
+  FROM dbo.Ventas V
+  WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+    AND V.IdSucursal IN (@IdSucursal)
+  GROUP BY V.IdCliente
+)
+SELECT TOP 10 IdCliente, TotalFacturado
+FROM Base
+ORDER BY TotalFacturado DESC;
+        </CommandText>
+      </Query>
+    </DataSet>
+  </DataSets>
+
+  <Body>
+    <ReportItems>
+      <Textbox Name="Title">
+        <Top>0mm</Top><Left>0mm</Left><Height>12mm</Height><Width>190mm</Width>
+        <Paragraphs><Paragraph><TextRuns><TextRun>
+          <Value>TOP 10 CLIENTES POR FACTURACIÓN</Value>
+          <Style><FontFamily>Segoe UI Semibold</FontFamily><FontSize>18pt</FontSize></Style>
+        </TextRun></TextRuns></Paragraph></Paragraphs>
+      </Textbox>
+
+      <!-- Tabla -->
+      <Tablix Name="TbxTop">
+        <DataSetName>DS_TopClientes</DataSetName>
+        <Top>14mm</Top><Left>0mm</Left><Height>70mm</Height><Width>90mm</Width>
+        <TablixBody>
+          <TablixColumns>
+            <TablixColumn><Width>30mm</Width></TablixColumn>
+            <TablixColumn><Width>60mm</Width></TablixColumn>
+          </TablixColumns>
+          <TablixRows>
+            <TablixRow>
+              <Height>8mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents><Textbox Name="H1"><Paragraphs><Paragraph><TextRuns><TextRun><Value>IdCliente</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="H2"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Total (Q)</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+            <TablixRow>
+              <Height>6mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents><Textbox Name="C1"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!IdCliente.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="C2"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Format(Fields!TotalFacturado.Value,"#,##0.00")</Value></TextRun></TextRuns></Paragraph></Paragraphs><Style><TextAlign>Right</TextAlign></Style></Textbox></CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+          </TablixRows>
+        </TablixBody>
+        <TablixColumnHierarchy><TablixMembers><TablixMember/><TablixMember/></TablixMembers></TablixColumnHierarchy>
+        <TablixRowHierarchy><TablixMembers><TablixMember/><TablixMember/></TablixMembers></TablixRowHierarchy>
+      </Tablix>
+
+      <!-- Barra horizontal -->
+      <Chart Name="chTopClientes">
+        <Top>14mm</Top><Left>95mm</Left><Height>70mm</Height><Width>95mm</Width>
+        <DataSetName>DS_TopClientes</DataSetName>
+        <ChartSeriesHierarchy>
+          <ChartMembers><ChartMember Name="ser"><Group Name="grpSer"/></ChartMembers>
+        </ChartSeriesHierarchy>
+        <ChartCategoryHierarchy>
+          <ChartMembers>
+            <ChartMember Name="cat">
+              <Group Name="grpCat"><GroupExpressions><GroupExpression>=Fields!IdCliente.Value</GroupExpression></GroupExpressions></Group>
+              <Label>=Fields!IdCliente.Value</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartCategoryHierarchy>
+        <ChartData>
+          <ChartSeriesCollection>
+            <ChartSeries Name="Serie">
+              <Type>Bar</Type>
+              <ChartDataPoints>
+                <ChartDataPoint>
+                  <ChartDataPointValues><Y>=Fields!TotalFacturado.Value</Y></ChartDataPointValues>
+                  <ChartDataLabel><Visible>true</Visible><Style><Format>Q #,##0</Format></Style></ChartDataLabel>
+                </ChartDataPoint>
+              </ChartDataPoints>
+            </ChartSeries>
+          </ChartSeriesCollection>
+        </ChartData>
+        <ChartAreas><ChartArea Name="Area"/></ChartAreas>
+        <ChartLegends><ChartLegend Name="Legend"><Hidden>true</Hidden></ChartLegend></ChartLegends>
+        <ChartTitles><ChartTitle Name="Title"><Caption>Top 10 (Q)</Caption></ChartTitle></ChartTitles>
+      </Chart>
+    </ReportItems>
+    <Height>100mm</Height>
+  </Body>
+
+  <Width>190mm</Width>
+  <Page>
+    <PageHeight>29.7cm</PageHeight><PageWidth>21cm</PageWidth>
+    <LeftMargin>1cm</LeftMargin><RightMargin>1cm</RightMargin><TopMargin>1cm</TopMargin><BottomMargin>1cm</BottomMargin>
+  </Page>
+</Report>

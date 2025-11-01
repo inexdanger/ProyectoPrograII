@@ -1,0 +1,178 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition"
+        xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <rd:ReportUnitType>Mm</rd:ReportUnitType>
+  <rd:ReportID>11111111-aaaa-bbbb-cccc-000000000003</rd:ReportID>
+  <AutoRefresh>0</AutoRefresh>
+
+  <DataSources>
+    <DataSource Name="DS_Ferreteria502">
+      <ConnectionProperties>
+        <DataProvider>SQL</DataProvider>
+        <ConnectString>Data Source=localhost;Initial Catalog=Ferreteria502;User ID=admin;Password=root;</ConnectString>
+      </ConnectionProperties>
+      <rd:DataSourceID>00000000-0000-0000-0000-000000000000</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+
+  <ReportParameters>
+    <ReportParameter Name="FechaDesde">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha desde</Prompt>
+      <DefaultValue><Values><Value>=DateSerial(Year(Today()),1,1)</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="FechaHasta">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha hasta</Prompt>
+      <DefaultValue><Values><Value>=Today()</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="IdSucursal">
+      <DataType>Integer</DataType>
+      <Prompt>Sucursal</Prompt>
+      <MultiValue>true</MultiValue>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+          <LabelField>NombreSucursal</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+    </ReportParameter>
+  </ReportParameters>
+
+  <DataSets>
+    <DataSet Name="DS_Sucursales">
+      <Fields>
+        <Field Name="IdSucursal"><DataField>IdSucursal</DataField></Field>
+        <Field Name="NombreSucursal"><DataField>NombreSucursal</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <CommandText>SELECT IdSucursal, NombreSucursal FROM dbo.Sucursales ORDER BY NombreSucursal;</CommandText>
+      </Query>
+    </DataSet>
+
+    <DataSet Name="DS_AgingDetalle">
+      <Fields>
+        <Field Name="IdVenta"><DataField>IdVenta</DataField></Field>
+        <Field Name="FechaVenta"><DataField>FechaVenta</DataField></Field>
+        <Field Name="IdCliente"><DataField>IdCliente</DataField></Field>
+        <Field Name="IdSucursal"><DataField>IdSucursal</DataField></Field>
+        <Field Name="Saldo"><DataField>Saldo</DataField></Field>
+        <Field Name="DiasMora"><DataField>DiasMora</DataField></Field>
+        <Field Name="RangoMora"><DataField>RangoMora</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+WITH Pagos AS(
+  SELECT IdVenta, SUM(Monto) AS MontoPagado
+  FROM dbo.PagosClientes
+  WHERE FechaPago BETWEEN @FechaDesde AND @FechaHasta
+  GROUP BY IdVenta
+),
+Base AS(
+  SELECT V.IdVenta, V.FechaVenta, V.IdCliente, V.IdSucursal,
+         V.TotalVenta - ISNULL(P.MontoPagado,0) AS Saldo,
+         DATEDIFF(DAY, V.FechaVenta, GETDATE()) AS DiasMora
+  FROM dbo.Ventas V
+  LEFT JOIN Pagos P ON P.IdVenta=V.IdVenta
+  WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+    AND V.IdSucursal IN (@IdSucursal)
+),
+Etiquetado AS(
+  SELECT *,
+    CASE
+      WHEN Saldo &lt;= 0 THEN '0 días'
+      WHEN DiasMora BETWEEN 0 AND 0 THEN '0 días'
+      WHEN DiasMora BETWEEN 1 AND 29 THEN '1 - 29 días'
+      WHEN DiasMora BETWEEN 30 AND 59 THEN '30 - 59 días'
+      WHEN DiasMora BETWEEN 60 AND 89 THEN '60 - 89 días'
+      WHEN DiasMora BETWEEN 90 AND 179 THEN '90 - 179 días'
+      ELSE '180 - más'
+    END AS RangoMora
+  FROM Base
+)
+SELECT IdVenta, FechaVenta, IdCliente, IdSucursal, Saldo, DiasMora, RangoMora
+FROM Etiquetado
+WHERE Saldo &gt; 0
+ORDER BY DiasMora DESC, FechaVenta ASC;
+        </CommandText>
+      </Query>
+    </DataSet>
+  </DataSets>
+
+  <Body>
+    <ReportItems>
+      <Textbox Name="Title">
+        <Top>0mm</Top><Left>0mm</Left><Height>12mm</Height><Width>190mm</Width>
+        <Paragraphs><Paragraph><TextRuns><TextRun>
+          <Value>CUENTAS POR COBRAR - DETALLE (AGING)</Value>
+          <Style><FontFamily>Segoe UI Semibold</FontFamily><FontSize>16pt</FontSize></Style>
+        </TextRun></TextRuns></Paragraph></Paragraphs>
+      </Textbox>
+
+      <Tablix Name="TbxAging">
+        <DataSetName>DS_AgingDetalle</DataSetName>
+        <Top>14mm</Top><Left>0mm</Left><Height>150mm</Height><Width>190mm</Width>
+        <TablixBody>
+          <TablixColumns>
+            <TablixColumn><Width>20mm</Width></TablixColumn>
+            <TablixColumn><Width>25mm</Width></TablixColumn>
+            <TablixColumn><Width>25mm</Width></TablixColumn>
+            <TablixColumn><Width>25mm</Width></TablixColumn>
+            <TablixColumn><Width>25mm</Width></TablixColumn>
+            <TablixColumn><Width>35mm</Width></TablixColumn>
+            <TablixColumn><Width>35mm</Width></TablixColumn>
+          </TablixColumns>
+          <TablixRows>
+            <TablixRow>
+              <Height>8mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents><Textbox Name="HId"><Paragraphs><Paragraph><TextRuns><TextRun><Value>IdVenta</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="HFecha"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Fecha</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="HCliente"><Paragraphs><Paragraph><TextRuns><TextRun><Value>IdCliente</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="HSucursal"><Paragraphs><Paragraph><TextRuns><TextRun><Value>IdSucursal</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="HSaldo"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Saldo (Q)</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="HDias"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Días Mora</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="HRango"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Rango</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+            <TablixRow>
+              <Height>6mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents><Textbox Name="CId"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!IdVenta.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="CFecha"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Format(Fields!FechaVenta.Value, "dd/MM/yyyy")</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="CCliente"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!IdCliente.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="CSuc"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!IdSucursal.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="CSaldo"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Format(Fields!Saldo.Value,"#,##0.00")</Value></TextRun></TextRuns></Paragraph></Paragraphs><Style><TextAlign>Right</TextAlign></Style></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="CDias"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!DiasMora.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="CRango"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!RangoMora.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+          </TablixRows>
+        </TablixBody>
+        <TablixColumnHierarchy><TablixMembers><TablixMember/><TablixMember/><TablixMember/><TablixMember/><TablixMember/><TablixMember/><TablixMember/></TablixMembers></TablixColumnHierarchy>
+        <TablixRowHierarchy><TablixMembers><TablixMember/><TablixMember/></TablixMembers></TablixRowHierarchy>
+      </Tablix>
+    </ReportItems>
+    <Height>170mm</Height>
+  </Body>
+
+  <Width>190mm</Width>
+  <Page>
+    <PageHeight>29.7cm</PageHeight><PageWidth>21cm</PageWidth>
+    <LeftMargin>1cm</LeftMargin><RightMargin>1cm</RightMargin><TopMargin>1cm</TopMargin><BottomMargin>1cm</BottomMargin>
+  </Page>
+</Report>

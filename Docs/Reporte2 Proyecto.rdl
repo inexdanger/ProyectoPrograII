@@ -1,0 +1,234 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition"
+        xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <rd:ReportUnitType>Mm</rd:ReportUnitType>
+  <rd:ReportID>11111111-aaaa-bbbb-cccc-000000000001</rd:ReportID>
+  <AutoRefresh>0</AutoRefresh>
+
+  <DataSources>
+    <DataSource Name="DS_Ferreteria502">
+      <ConnectionProperties>
+        <DataProvider>SQL</DataProvider>
+        <ConnectString>Data Source=localhost;Initial Catalog=Ferreteria502;User ID=admin;Password=root;</ConnectString>
+      </ConnectionProperties>
+      <rd:DataSourceID>00000000-0000-0000-0000-000000000000</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+
+  <ReportParameters>
+    <ReportParameter Name="FechaDesde">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha desde</Prompt>
+      <DefaultValue><Values><Value>=DateSerial(Year(Today()),1,1)</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="FechaHasta">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha hasta</Prompt>
+      <DefaultValue><Values><Value>=Today()</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="IdSucursal">
+      <DataType>Integer</DataType>
+      <Prompt>Sucursal</Prompt>
+      <MultiValue>true</MultiValue>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+          <LabelField>NombreSucursal</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+    </ReportParameter>
+  </ReportParameters>
+
+  <DataSets>
+    <DataSet Name="DS_Sucursales">
+      <Fields>
+        <Field Name="IdSucursal"><DataField>IdSucursal</DataField></Field>
+        <Field Name="NombreSucursal"><DataField>NombreSucursal</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <CommandText>SELECT IdSucursal, NombreSucursal FROM dbo.Sucursales ORDER BY NombreSucursal;</CommandText>
+      </Query>
+    </DataSet>
+
+    <DataSet Name="DS_VentasPorSucursal">
+      <Fields>
+        <Field Name="IdSucursal"><DataField>IdSucursal</DataField></Field>
+        <Field Name="NombreSucursal"><DataField>NombreSucursal</DataField></Field>
+        <Field Name="TotalVentas"><DataField>TotalVentas</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+SELECT S.IdSucursal,
+       S.NombreSucursal,
+       SUM(V.TotalVenta) AS TotalVentas
+FROM dbo.Ventas V
+JOIN dbo.Sucursales S ON S.IdSucursal=V.IdSucursal
+WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+  AND V.IdSucursal IN (@IdSucursal)
+GROUP BY S.IdSucursal, S.NombreSucursal
+ORDER BY S.NombreSucursal;
+        </CommandText>
+      </Query>
+    </DataSet>
+
+    <DataSet Name="DS_Resumen">
+      <Fields>
+        <Field Name="TotalFacturado"><DataField>TotalFacturado</DataField></Field>
+        <Field Name="Transacciones"><DataField>Transacciones</DataField></Field>
+        <Field Name="TicketPromedio"><DataField>TicketPromedio</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+SELECT SUM(V.TotalVenta) AS TotalFacturado,
+       COUNT(*) AS Transacciones,
+       CASE WHEN COUNT(*)=0 THEN 0 ELSE SUM(V.TotalVenta)*1.0/COUNT(*) END AS TicketPromedio
+FROM dbo.Ventas V
+WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+  AND V.IdSucursal IN (@IdSucursal);
+        </CommandText>
+      </Query>
+    </DataSet>
+  </DataSets>
+
+  <Body>
+    <ReportItems>
+      <Textbox Name="Title">
+        <Top>0mm</Top><Left>0mm</Left><Height>12mm</Height><Width>190mm</Width>
+        <Paragraphs><Paragraph><TextRuns><TextRun>
+          <Value>VENTAS POR SUCURSAL</Value>
+          <Style><FontFamily>Segoe UI Semibold</FontFamily><FontSize>18pt</FontSize></Style>
+        </TextRun></TextRuns></Paragraph></Paragraphs>
+      </Textbox>
+
+      <!-- Resumen (tablix 1x3) -->
+      <Tablix Name="TbxResumen">
+        <DataSetName>DS_Resumen</DataSetName>
+        <Top>13mm</Top><Left>0mm</Left><Height>10mm</Height><Width>190mm</Width>
+        <TablixBody>
+          <TablixColumns><TablixColumn><Width>63mm</Width></TablixColumn><TablixColumn><Width>63mm</Width></TablixColumn><TablixColumn><Width>64mm</Width></TablixColumn></TablixColumns>
+          <TablixRows>
+            <TablixRow>
+              <Height>10mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents>
+                  <Textbox Name="TxTotal"><Paragraphs><Paragraph><TextRuns><TextRun>
+                    <Value>= "Total facturado: Q " &amp; Format(Fields!TotalFacturado.Value, "#,##0.00")</Value>
+                    <Style><FontSize>10pt</FontSize></Style>
+                  </TextRun></TextRuns></Paragraph></Paragraphs></Textbox>
+                </CellContents></TablixCell>
+                <TablixCell><CellContents>
+                  <Textbox Name="TxTrans"><Paragraphs><Paragraph><TextRuns><TextRun>
+                    <Value>= "Transacciones: " &amp; Fields!Transacciones.Value</Value>
+                    <Style><FontSize>10pt</FontSize></Style>
+                  </TextRun></TextRuns></Paragraph></Paragraphs></Textbox>
+                </CellContents></TablixCell>
+                <TablixCell><CellContents>
+                  <Textbox Name="TxTicket"><Paragraphs><Paragraph><TextRuns><TextRun>
+                    <Value>= "Ticket promedio: Q " &amp; Format(Fields!TicketPromedio.Value, "#,##0.00")</Value>
+                    <Style><FontSize>10pt</FontSize></Style>
+                  </TextRun></TextRuns></Paragraph></Paragraphs></Textbox>
+                </CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+          </TablixRows>
+        </TablixBody>
+        <TablixColumnHierarchy><TablixMembers><TablixMember/><TablixMember/><TablixMember/></TablixMembers></TablixColumnHierarchy>
+        <TablixRowHierarchy><TablixMembers><TablixMember/></TablixMembers></TablixRowHierarchy>
+      </Tablix>
+
+      <!-- Chart columnas -->
+      <Chart Name="chSucursal">
+        <Top>28mm</Top><Left>0mm</Left><Height>70mm</Height><Width>190mm</Width>
+        <DataSetName>DS_VentasPorSucursal</DataSetName>
+        <ChartSeriesHierarchy>
+          <ChartMembers><ChartMember Name="ser1"><Group Name="grpSer1"/><Label>Total</Label></ChartMember></ChartMembers>
+        </ChartSeriesHierarchy>
+        <ChartCategoryHierarchy>
+          <ChartMembers>
+            <ChartMember Name="catSuc">
+              <Group Name="grpSuc"><GroupExpressions><GroupExpression>=Fields!NombreSucursal.Value</GroupExpression></GroupExpressions></Group>
+              <Label>=Fields!NombreSucursal.Value</Label>
+              <SortExpressions><SortExpression><Value>=Fields!NombreSucursal.Value</Value><Direction>Ascending</Direction></SortExpression></SortExpressions>
+            </ChartMember>
+          </ChartMembers>
+        </ChartCategoryHierarchy>
+        <ChartData>
+          <ChartSeriesCollection>
+            <ChartSeries Name="SerieTotal">
+              <Type>Column</Type>
+              <ChartDataPoints>
+                <ChartDataPoint>
+                  <ChartDataPointValues><Y>=Fields!TotalVentas.Value</Y></ChartDataPointValues>
+                  <ChartDataLabel><Visible>true</Visible><Style><Format>Q #,##0</Format></Style></ChartDataLabel>
+                </ChartDataPoint>
+              </ChartDataPoints>
+            </ChartSeries>
+          </ChartSeriesCollection>
+        </ChartData>
+        <ChartAreas><ChartArea Name="AreaSuc"/></ChartAreas>
+        <ChartLegends><ChartLegend Name="Legend1"><Hidden>true</Hidden></ChartLegend></ChartLegends>
+        <ChartTitles><ChartTitle Name="Title1"><Caption>VENTAS POR SUCURSAL</Caption></ChartTitle></ChartTitles>
+      </Chart>
+
+      <!-- Detalle (tablix) -->
+      <Tablix Name="TbxDetalle">
+        <DataSetName>DS_VentasPorSucursal</DataSetName>
+        <Top>100mm</Top><Left>0mm</Left><Height>50mm</Height><Width>190mm</Width>
+        <TablixBody>
+          <TablixColumns>
+            <TablixColumn><Width>30mm</Width></TablixColumn>
+            <TablixColumn><Width>110mm</Width></TablixColumn>
+            <TablixColumn><Width>50mm</Width></TablixColumn>
+          </TablixColumns>
+          <TablixRows>
+            <TablixRow>
+              <Height>8mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents><Textbox Name="H1"><Paragraphs><Paragraph><TextRuns><TextRun><Value>IdSucursal</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="H2"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Sucursal</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="H3"><Paragraphs><Paragraph><TextRuns><TextRun><Value>Total (Q)</Value><Style><FontWeight>Bold</FontWeight></Style></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+            <TablixRow>
+              <Height>6mm</Height>
+              <TablixCells>
+                <TablixCell><CellContents><Textbox Name="C1"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!IdSucursal.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="C2"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Fields!NombreSucursal.Value</Value></TextRun></TextRuns></Paragraph></Paragraphs></Textbox></CellContents></TablixCell>
+                <TablixCell><CellContents><Textbox Name="C3"><Paragraphs><Paragraph><TextRuns><TextRun><Value>=Format(Fields!TotalVentas.Value, "#,##0.00")</Value></TextRun></TextRuns></Paragraph></Paragraphs><Style><TextAlign>Right</TextAlign></Style></Textbox></CellContents></TablixCell>
+              </TablixCells>
+            </TablixRow>
+          </TablixRows>
+        </TablixBody>
+        <TablixColumnHierarchy><TablixMembers><TablixMember/><TablixMember/><TablixMember/></TablixMembers></TablixColumnHierarchy>
+        <TablixRowHierarchy><TablixMembers><TablixMember/><TablixMember/></TablixMembers></TablixRowHierarchy>
+      </Tablix>
+    </ReportItems>
+    <Height>160mm</Height>
+  </Body>
+
+  <Width>190mm</Width>
+  <Page>
+    <PageHeight>29.7cm</PageHeight><PageWidth>21cm</PageWidth>
+    <LeftMargin>1cm</LeftMargin><RightMargin>1cm</RightMargin><TopMargin>1cm</TopMargin><BottomMargin>1cm</BottomMargin>
+  </Page>
+</Report>

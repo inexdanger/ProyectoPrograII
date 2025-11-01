@@ -1,0 +1,588 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition"
+        xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner">
+  <rd:ReportUnitType>Mm</rd:ReportUnitType>
+  <rd:ReportID>c3a9f9f2-2bcd-4c9a-9eaa-111122223333</rd:ReportID>
+  <AutoRefresh>0</AutoRefresh>
+
+  <!-- ========== DATA SOURCE (embebida) ========== -->
+  <DataSources>
+    <DataSource Name="DS_Ferreteria502">
+      <ConnectionProperties>
+        <DataProvider>SQL</DataProvider>
+        <ConnectString>Data Source=localhost;Initial Catalog=Ferreteria502;User ID=admin;Password=root;</ConnectString>
+      </ConnectionProperties>
+      <rd:DataSourceID>11111111-1111-1111-1111-111111111111</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+
+  <!-- ========== PARÁMETROS (multivalor sin NULL + Select All) ========== -->
+  <ReportParameters>
+    <ReportParameter Name="FechaDesde">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha desde</Prompt>
+      <DefaultValue><Values><Value>=DateSerial(Year(Today()),1,1)</Value></Values></DefaultValue>
+    </ReportParameter>
+    <ReportParameter Name="FechaHasta">
+      <DataType>DateTime</DataType>
+      <Prompt>Fecha hasta</Prompt>
+      <DefaultValue><Values><Value>=Today()</Value></Values></DefaultValue>
+    </ReportParameter>
+
+    <ReportParameter Name="IdSucursal">
+      <DataType>Integer</DataType>
+      <Prompt>Sucursal</Prompt>
+      <MultiValue>true</MultiValue>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+          <LabelField>NombreSucursal</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>DS_Sucursales</DataSetName>
+          <ValueField>IdSucursal</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+    </ReportParameter>
+
+    <ReportParameter Name="TipoCliente">
+      <DataType>String</DataType>
+      <Prompt>Tipo de cliente</Prompt>
+      <MultiValue>true</MultiValue>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>DS_TipoCliente</DataSetName>
+          <ValueField>TipoCliente</ValueField>
+          <LabelField>TipoCliente</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>DS_TipoCliente</DataSetName>
+          <ValueField>TipoCliente</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+    </ReportParameter>
+
+    <ReportParameter Name="Estado">
+      <DataType>String</DataType>
+      <Prompt>Estado</Prompt>
+      <MultiValue>true</MultiValue>
+      <ValidValues>
+        <DataSetReference>
+          <DataSetName>DS_Estados</DataSetName>
+          <ValueField>Estado</ValueField>
+          <LabelField>Estado</LabelField>
+        </DataSetReference>
+      </ValidValues>
+      <DefaultValue>
+        <DataSetReference>
+          <DataSetName>DS_Estados</DataSetName>
+          <ValueField>Estado</ValueField>
+        </DataSetReference>
+      </DefaultValue>
+    </ReportParameter>
+  </ReportParameters>
+
+  <!-- ========== DATASETS ========== -->
+  <DataSets>
+    <DataSet Name="DS_Sucursales">
+      <Fields>
+        <Field Name="IdSucursal"><DataField>IdSucursal</DataField></Field>
+        <Field Name="NombreSucursal"><DataField>NombreSucursal</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <CommandText>SELECT IdSucursal, NombreSucursal FROM dbo.Sucursales ORDER BY NombreSucursal;</CommandText>
+      </Query>
+    </DataSet>
+
+    <DataSet Name="DS_TipoCliente">
+      <Fields>
+        <Field Name="TipoCliente"><DataField>TipoCliente</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <CommandText>SELECT DISTINCT TipoCliente FROM dbo.Clientes WHERE TipoCliente IS NOT NULL;</CommandText>
+      </Query>
+    </DataSet>
+
+    <DataSet Name="DS_Estados">
+      <Fields>
+        <Field Name="Estado"><DataField>Estado</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <CommandText>
+          SELECT 'Pagada' AS Estado
+          UNION ALL SELECT 'Vigente'
+          UNION ALL SELECT 'Vencida';
+        </CommandText>
+      </Query>
+    </DataSet>
+
+    <!-- KPI: Pendiente por clasificación -->
+    <DataSet Name="DS_CC_PendientePorClasificacion">
+      <Fields>
+        <Field Name="TipoCliente"><DataField>TipoCliente</DataField></Field>
+        <Field Name="Pendiente"><DataField>Pendiente</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+          <QueryParameter Name="@TipoCliente"><Value>=Parameters!TipoCliente.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+WITH Pagos AS(
+  SELECT IdVenta, SUM(Monto) AS MontoPagado
+  FROM dbo.PagosClientes
+  WHERE FechaPago BETWEEN @FechaDesde AND @FechaHasta
+  GROUP BY IdVenta
+),
+VentasFiltradas AS(
+  SELECT V.IdVenta, V.FechaVenta, V.TotalVenta,
+         ISNULL(P.MontoPagado,0) AS MontoPagado,
+         (V.TotalVenta-ISNULL(P.MontoPagado,0)) AS Saldo,
+         C.TipoCliente, V.IdSucursal
+  FROM dbo.Ventas V
+  LEFT JOIN Pagos P ON P.IdVenta=V.IdVenta
+  JOIN dbo.Clientes C ON C.IdCliente=V.IdCliente
+  WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+    AND V.IdSucursal IN (@IdSucursal)
+    AND C.TipoCliente IN (@TipoCliente)
+)
+SELECT TipoCliente,
+       SUM(CASE WHEN Saldo&gt;0 THEN Saldo ELSE 0 END) AS Pendiente
+FROM VentasFiltradas
+GROUP BY TipoCliente;
+        </CommandText>
+      </Query>
+    </DataSet>
+
+    <!-- A cobrar por mes -->
+    <DataSet Name="DS_CC_CobrarPorMes">
+      <Fields>
+        <Field Name="Mes"><DataField>Mes</DataField></Field>
+        <Field Name="MesNum"><DataField>MesNum</DataField></Field>
+        <Field Name="Monto"><DataField>Monto</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+          <QueryParameter Name="@TipoCliente"><Value>=Parameters!TipoCliente.Value</Value></QueryParameter>
+          <QueryParameter Name="@Estado"><Value>=Parameters!Estado.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+WITH Pagos AS(
+  SELECT IdVenta, SUM(Monto) AS MontoPagado
+  FROM dbo.PagosClientes
+  WHERE FechaPago BETWEEN @FechaDesde AND @FechaHasta
+  GROUP BY IdVenta
+),
+VentasFiltradas AS(
+  SELECT V.IdVenta, V.FechaVenta, V.TotalVenta,
+         ISNULL(P.MontoPagado,0) AS MontoPagado,
+         (V.TotalVenta-ISNULL(P.MontoPagado,0)) AS Saldo,
+         C.TipoCliente, V.IdSucursal,
+         DATEDIFF(DAY, V.FechaVenta, GETDATE()) AS DiasMora
+  FROM dbo.Ventas V
+  LEFT JOIN Pagos P ON P.IdVenta=V.IdVenta
+  JOIN dbo.Clientes C ON C.IdCliente=V.IdCliente
+  WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+    AND V.IdSucursal IN (@IdSucursal)
+    AND C.TipoCliente IN (@TipoCliente)
+),
+Base AS(
+  SELECT *,
+         CASE WHEN Saldo&lt;=0 THEN 'Pagada'
+              WHEN DiasMora&gt;30 THEN 'Vencida'
+              ELSE 'Vigente' END AS Estado
+  FROM VentasFiltradas
+)
+SELECT DATENAME(MONTH, FechaVenta) AS Mes,
+       MONTH(FechaVenta) AS MesNum,
+       SUM(CASE WHEN Saldo&gt;0 THEN Saldo ELSE 0 END) AS Monto
+FROM Base
+WHERE Estado IN (@Estado)
+GROUP BY DATENAME(MONTH, FechaVenta), MONTH(FechaVenta)
+ORDER BY MesNum;
+        </CommandText>
+      </Query>
+    </DataSet>
+
+    <!-- Monto por estado -->
+    <DataSet Name="DS_CC_PorEstado">
+      <Fields>
+        <Field Name="Estado"><DataField>Estado</DataField></Field>
+        <Field Name="Monto"><DataField>Monto</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+          <QueryParameter Name="@TipoCliente"><Value>=Parameters!TipoCliente.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+WITH Pagos AS(
+  SELECT IdVenta, SUM(Monto) AS MontoPagado
+  FROM dbo.PagosClientes
+  WHERE FechaPago BETWEEN @FechaDesde AND @FechaHasta
+  GROUP BY IdVenta
+),
+VentasFiltradas AS(
+  SELECT V.IdVenta, V.FechaVenta, V.TotalVenta,
+         ISNULL(P.MontoPagado,0) AS MontoPagado,
+         (V.TotalVenta-ISNULL(P.MontoPagado,0)) AS Saldo,
+         V.IdSucursal,
+         DATEDIFF(DAY, V.FechaVenta, GETDATE()) AS DiasMora
+  FROM dbo.Ventas V
+  LEFT JOIN Pagos P ON P.IdVenta=V.IdVenta
+  WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+    AND V.IdSucursal IN (@IdSucursal)
+),
+Base AS(
+  SELECT *,
+         CASE WHEN Saldo&lt;=0 THEN 'Pagada'
+              WHEN DiasMora&gt;30 THEN 'Vencida'
+              ELSE 'Vigente' END AS Estado
+  FROM VentasFiltradas
+)
+SELECT Estado,
+       SUM(CASE WHEN Saldo&gt;0 THEN Saldo ELSE 0 END) AS Monto
+FROM Base
+GROUP BY Estado;
+        </CommandText>
+      </Query>
+    </DataSet>
+
+    <!-- Aging -->
+    <DataSet Name="DS_CC_Aging">
+      <Fields>
+        <Field Name="RangoMora"><DataField>RangoMora</DataField></Field>
+        <Field Name="Monto"><DataField>Monto</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+          <QueryParameter Name="@TipoCliente"><Value>=Parameters!TipoCliente.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+WITH Pagos AS(
+  SELECT IdVenta, SUM(Monto) AS MontoPagado
+  FROM dbo.PagosClientes
+  WHERE FechaPago BETWEEN @FechaDesde AND @FechaHasta
+  GROUP BY IdVenta
+),
+VentasFiltradas AS(
+  SELECT V.IdVenta, V.FechaVenta, V.TotalVenta,
+         ISNULL(P.MontoPagado,0) AS MontoPagado,
+         (V.TotalVenta-ISNULL(P.MontoPagado,0)) AS Saldo,
+         DATEDIFF(DAY, V.FechaVenta, GETDATE()) AS DiasMora,
+         V.IdSucursal
+  FROM dbo.Ventas V
+  LEFT JOIN Pagos P ON P.IdVenta=V.IdVenta
+  WHERE V.FechaVenta BETWEEN @FechaDesde AND @FechaHasta
+    AND V.IdSucursal IN (@IdSucursal)
+),
+Base AS(
+ SELECT *,
+ CASE 
+   WHEN Saldo&lt;=0 THEN '0 días'
+   WHEN DiasMora BETWEEN 0 AND 0 THEN '0 días'
+   WHEN DiasMora BETWEEN 1 AND 29 THEN '1 - 29 días'
+   WHEN DiasMora BETWEEN 30 AND 59 THEN '30 - 59 días'
+   WHEN DiasMora BETWEEN 60 AND 89 THEN '60 - 89 días'
+   WHEN DiasMora BETWEEN 90 AND 179 THEN '90 - 179 días'
+   ELSE '180 - más' END AS RangoMora
+ FROM VentasFiltradas
+)
+SELECT RangoMora,
+       SUM(CASE WHEN Saldo&gt;0 THEN Saldo ELSE 0 END) AS Monto
+FROM Base
+GROUP BY RangoMora;
+        </CommandText>
+      </Query>
+    </DataSet>
+
+    <!-- Cobrado por mes -->
+    <DataSet Name="DS_CC_CobradoPorMes">
+      <Fields>
+        <Field Name="Mes"><DataField>Mes</DataField></Field>
+        <Field Name="MesNum"><DataField>MesNum</DataField></Field>
+        <Field Name="Cobrado"><DataField>Cobrado</DataField></Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DS_Ferreteria502</DataSourceName>
+        <QueryParameters>
+          <QueryParameter Name="@FechaDesde"><Value>=Parameters!FechaDesde.Value</Value></QueryParameter>
+          <QueryParameter Name="@FechaHasta"><Value>=Parameters!FechaHasta.Value</Value></QueryParameter>
+          <QueryParameter Name="@IdSucursal"><Value>=Parameters!IdSucursal.Value</Value></QueryParameter>
+        </QueryParameters>
+        <CommandText>
+SELECT DATENAME(MONTH, P.FechaPago) AS Mes,
+       MONTH(P.FechaPago) AS MesNum,
+       SUM(P.Monto) AS Cobrado
+FROM dbo.PagosClientes P
+JOIN dbo.Ventas V ON V.IdVenta=P.IdVenta
+WHERE P.FechaPago BETWEEN @FechaDesde AND @FechaHasta
+  AND V.IdSucursal IN (@IdSucursal)
+GROUP BY DATENAME(MONTH, P.FechaPago), MONTH(P.FechaPago)
+ORDER BY MesNum;
+        </CommandText>
+      </Query>
+    </DataSet>
+  </DataSets>
+
+  <!-- ========== DISEÑO ========== -->
+  <Body>
+    <ReportItems>
+
+      <!-- Título -->
+      <Textbox Name="ReportTitle">
+        <Top>0mm</Top><Left>0mm</Left><Height>12mm</Height><Width>190mm</Width>
+        <Paragraphs><Paragraph><TextRuns><TextRun>
+          <Value>DASHBOARD CRÉDITOS</Value>
+          <Style><FontFamily>Segoe UI</FontFamily><FontSize>28pt</FontSize></Style>
+        </TextRun></TextRuns></Paragraph></Paragraphs>
+        <CanGrow>true</CanGrow>
+      </Textbox>
+
+      <!-- KPIs -->
+      <Tablix Name="tbxKPIs">
+        <DataSetName>DS_CC_PendientePorClasificacion</DataSetName>
+        <Top>14mm</Top><Left>0mm</Left><Height>18mm</Height><Width>190mm</Width>
+        <TablixBody>
+          <TablixColumns>
+            <TablixColumn><Width>95mm</Width></TablixColumn>
+            <TablixColumn><Width>95mm</Width></TablixColumn>
+          </TablixColumns>
+          <TablixRows>
+            <TablixRow>
+              <Height>18mm</Height>
+              <TablixCells>
+                <TablixCell>
+                  <CellContents>
+                    <Textbox Name="KPI_Mayorista">
+                      <Paragraphs><Paragraph><TextRuns><TextRun>
+                        <Value>= "Pendiente mayorista" &amp; vbCrLf &amp; "Q" &amp; Format(Sum(IIF(Fields!TipoCliente.Value="Mayorista", Fields!Pendiente.Value, 0)), "#,##0.00")</Value>
+                        <Style><FontSize>14pt</FontSize><FontWeight>Bold</FontWeight></Style>
+                      </TextRun></TextRuns></Paragraph></Paragraphs>
+                      <Style><Border><Style>Solid</Style></Border><PaddingLeft>4pt</PaddingLeft><PaddingTop>2pt</PaddingTop></Style>
+                    </Textbox>
+                  </CellContents>
+                </TablixCell>
+                <TablixCell>
+                  <CellContents>
+                    <Textbox Name="KPI_Minorista">
+                      <Paragraphs><Paragraph><TextRuns><TextRun>
+                        <Value>= "Pendiente minorista" &amp; vbCrLf &amp; "Q" &amp; Format(Sum(IIF(Fields!TipoCliente.Value="Minorista", Fields!Pendiente.Value, 0)), "#,##0.00")</Value>
+                        <Style><FontSize>14pt</FontSize><FontWeight>Bold</FontWeight></Style>
+                      </TextRun></TextRuns></Paragraph></Paragraphs>
+                      <Style><Border><Style>Solid</Style></Border><PaddingLeft>4pt</PaddingLeft><PaddingTop>2pt</PaddingTop></Style>
+                    </Textbox>
+                  </CellContents>
+                </TablixCell>
+              </TablixCells>
+            </TablixRow>
+          </TablixRows>
+        </TablixBody>
+        <TablixColumnHierarchy><TablixMembers><TablixMember Name="tm1"/><TablixMember Name="tm2"/></TablixMembers></TablixColumnHierarchy>
+        <TablixRowHierarchy><TablixMembers><TablixMember Name="tr1"/></TablixMembers></TablixRowHierarchy>
+      </Tablix>
+
+      <!-- Chart: Column (A cobrar por mes) -->
+      <Chart Name="chCobrarPorMes">
+        <Top>38mm</Top><Left>0mm</Left><Height>60mm</Height><Width>120mm</Width>
+        <DataSetName>DS_CC_CobrarPorMes</DataSetName>
+        <ChartSeriesHierarchy>
+          <ChartMembers>
+            <ChartMember Name="serMonto">
+              <Group Name="grpSerieMontoMes"/><Label>Monto</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartSeriesHierarchy>
+        <ChartCategoryHierarchy>
+          <ChartMembers>
+            <ChartMember Name="catMes">
+              <Group Name="grpMes"><GroupExpressions><GroupExpression>=Fields!Mes.Value</GroupExpression></GroupExpressions></Group>
+              <Label>=Fields!Mes.Value</Label>
+              <SortExpressions>
+                <SortExpression><Value>=Fields!MesNum.Value</Value><Direction>Ascending</Direction></SortExpression>
+              </SortExpressions>
+            </ChartMember>
+          </ChartMembers>
+        </ChartCategoryHierarchy>
+        <ChartData>
+          <ChartSeriesCollection>
+            <ChartSeries Name="SerieMonto">
+              <Type>Column</Type>
+              <ChartDataPoints>
+                <ChartDataPoint>
+                  <ChartDataPointValues><Y>=Fields!Monto.Value</Y></ChartDataPointValues>
+                  <ChartDataLabel><Visible>true</Visible><Style><Format>Q #,##0</Format></Style></ChartDataLabel>
+                </ChartDataPoint>
+              </ChartDataPoints>
+            </ChartSeries>
+          </ChartSeriesCollection>
+        </ChartData>
+        <ChartAreas><ChartArea Name="ChartAreaCobrar"/></ChartAreas>
+        <ChartLegends><ChartLegend Name="LegendCobrar"><Hidden>true</Hidden></ChartLegend></ChartLegends>
+        <ChartTitles><ChartTitle Name="TitleCobrar"><Caption>MONTO A COBRAR POR MES</Caption></ChartTitle></ChartTitles>
+      </Chart>
+
+      <!-- Chart: Pie (Monto por estado) -->
+      <Chart Name="chPorEstado">
+        <Top>38mm</Top><Left>122mm</Left><Height>60mm</Height><Width>68mm</Width>
+        <DataSetName>DS_CC_PorEstado</DataSetName>
+        <ChartSeriesHierarchy>
+          <ChartMembers>
+            <ChartMember Name="serEstado">
+              <Group Name="grpSerieMontoEstado"/><Label>Monto</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartSeriesHierarchy>
+        <ChartCategoryHierarchy>
+          <ChartMembers>
+            <ChartMember Name="catEstado">
+              <Group Name="grpEstado"><GroupExpressions><GroupExpression>=Fields!Estado.Value</GroupExpression></GroupExpressions></Group>
+              <Label>=Fields!Estado.Value</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartCategoryHierarchy>
+        <ChartData>
+          <ChartSeriesCollection>
+            <ChartSeries Name="SerieEstado">
+              <Type>Shape</Type>
+              <Subtype>Pie</Subtype>
+              <ChartDataPoints>
+                <ChartDataPoint>
+                  <ChartDataPointValues><Y>=Fields!Monto.Value</Y></ChartDataPointValues>
+                  <ChartDataLabel><Visible>true</Visible><Label>=Format(Fields!Monto.Value,"Q #,##0")</Label></ChartDataLabel>
+                </ChartDataPoint>
+              </ChartDataPoints>
+            </ChartSeries>
+          </ChartSeriesCollection>
+        </ChartData>
+        <ChartAreas><ChartArea Name="ChartAreaEstado"/></ChartAreas>
+        <ChartLegends><ChartLegend Name="LegendEstado"><Hidden>false</Hidden></ChartLegend></ChartLegends>
+        <ChartTitles><ChartTitle Name="TitleEstado"><Caption>MONTO POR ESTADO</Caption></ChartTitle></ChartTitles>
+      </Chart>
+
+      <!-- Chart: Bar (Aging) -->
+      <Chart Name="chAging">
+        <Top>102mm</Top><Left>0mm</Left><Height>60mm</Height><Width>120mm</Width>
+        <DataSetName>DS_CC_Aging</DataSetName>
+        <ChartSeriesHierarchy>
+          <ChartMembers>
+            <ChartMember Name="serAging">
+              <Group Name="grpSerieMontoAging"/><Label>Monto</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartSeriesHierarchy>
+        <ChartCategoryHierarchy>
+          <ChartMembers>
+            <ChartMember Name="catRango">
+              <Group Name="grpRango"><GroupExpressions><GroupExpression>=Fields!RangoMora.Value</GroupExpression></GroupExpressions></Group>
+              <Label>=Fields!RangoMora.Value</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartCategoryHierarchy>
+        <ChartData>
+          <ChartSeriesCollection>
+            <ChartSeries Name="SerieAging">
+              <Type>Bar</Type>
+              <ChartDataPoints>
+                <ChartDataPoint>
+                  <ChartDataPointValues><Y>=Fields!Monto.Value</Y></ChartDataPointValues>
+                  <ChartDataLabel><Visible>true</Visible><Style><Format>Q #,##0</Format></Style></ChartDataLabel>
+                </ChartDataPoint>
+              </ChartDataPoints>
+            </ChartSeries>
+          </ChartSeriesCollection>
+        </ChartData>
+        <ChartAreas><ChartArea Name="ChartAreaAging"/></ChartAreas>
+        <ChartLegends><ChartLegend Name="LegendAging"><Hidden>true</Hidden></ChartLegend></ChartLegends>
+        <ChartTitles><ChartTitle Name="TitleAging"><Caption>MORA POR RANGO DE DÍAS</Caption></ChartTitle></ChartTitles>
+      </Chart>
+
+      <!-- Chart: Line (Cobrado por mes) -->
+      <Chart Name="chCobrado">
+        <Top>102mm</Top><Left>122mm</Left><Height>60mm</Height><Width>68mm</Width>
+        <DataSetName>DS_CC_CobradoPorMes</DataSetName>
+        <ChartSeriesHierarchy>
+          <ChartMembers>
+            <ChartMember Name="serCobrado">
+              <Group Name="grpSerieCobrado"/><Label>Cobrado</Label>
+            </ChartMember>
+          </ChartMembers>
+        </ChartSeriesHierarchy>
+        <ChartCategoryHierarchy>
+          <ChartMembers>
+            <ChartMember Name="catMesCobro">
+              <Group Name="grpMesCobro"><GroupExpressions><GroupExpression>=Fields!Mes.Value</GroupExpression></GroupExpressions></Group>
+              <Label>=Fields!Mes.Value</Label>
+              <SortExpressions>
+                <SortExpression><Value>=Fields!MesNum.Value</Value><Direction>Ascending</Direction></SortExpression>
+              </SortExpressions>
+            </ChartMember>
+          </ChartMembers>
+        </ChartCategoryHierarchy>
+        <ChartData>
+          <ChartSeriesCollection>
+            <ChartSeries Name="SerieCobrado">
+              <Type>Line</Type>
+              <ChartDataPoints>
+                <ChartDataPoint>
+                  <ChartDataPointValues><Y>=Fields!Cobrado.Value</Y></ChartDataPointValues>
+                  <ChartDataLabel><Visible>true</Visible><Style><Format>Q #,##0</Format></Style></ChartDataLabel>
+                </ChartDataPoint>
+              </ChartDataPoints>
+            </ChartSeries>
+          </ChartSeriesCollection>
+        </ChartData>
+        <ChartAreas><ChartArea Name="ChartAreaCobrado"/></ChartAreas>
+        <ChartLegends><ChartLegend Name="LegendCobrado"><Hidden>true</Hidden></ChartLegend></ChartLegends>
+        <ChartTitles><ChartTitle Name="TitleCobrado"><Caption>MONTO COBRADO POR MES</Caption></ChartTitle></ChartTitles>
+      </Chart>
+
+    </ReportItems>
+    <Height>180mm</Height>
+  </Body>
+
+  <Width>190mm</Width>
+  <Page>
+    <PageHeight>29.7cm</PageHeight>
+    <PageWidth>21cm</PageWidth>
+    <LeftMargin>1cm</LeftMargin>
+    <RightMargin>1cm</RightMargin>
+    <TopMargin>1cm</TopMargin>
+    <BottomMargin>1cm</BottomMargin>
+    <ColumnSpacing>0.13cm</ColumnSpacing>
+    <PageFooter>
+      <Height>10mm</Height>
+      <PrintOnFirstPage>true</PrintOnFirstPage>
+      <PrintOnLastPage>true</PrintOnLastPage>
+      <ReportItems>
+        <Textbox Name="ExecutionTime">
+          <Top>2mm</Top><Left>140mm</Left><Height>6mm</Height><Width>50mm</Width>
+          <Paragraphs><Paragraph><TextRuns><TextRun><Value>=Globals!ExecutionTime</Value></TextRun></TextRuns></Paragraph></Paragraphs>
+          <Style><TextAlign>Right</TextAlign></Style>
+        </Textbox>
+      </ReportItems>
+    </PageFooter>
+  </Page>
+</Report>
